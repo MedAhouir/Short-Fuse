@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Short Fuse — pass the question, dodge the boom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Space+Mono:wght@400;700&family=Cairo:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0a0d0a;
+    --panel: #12160f;
+    --panel-2: #1a201a;
+    --wire: #2a332a;
+    --red: #ff3d1f;
+    --red-dim: #7a2314;
+    --amber: #ffb100;
+    --green: #35ff6e;
+    --green-dim: #144024;
+    --text: #eae6da;
+    --muted: #7d8579;
+  }
+  *{ box-sizing: border-box; }
+  html, body{ margin:0; padding:0; }
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(circle at 20% 10%, rgba(255,61,31,0.05), transparent 40%),
+      radial-gradient(circle at 80% 90%, rgba(53,255,110,0.04), transparent 40%);
+  }
+  .display{ font-family:'Big Shoulders Display', sans-serif; font-weight:900; text-transform:uppercase; letter-spacing:0.02em; }
+  .wrap{ max-width: 640px; margin: 0 auto; padding: 32px 20px 60px; min-height: 100vh; display:flex; flex-direction:column; }
+  .screen{ display:none; flex:1; flex-direction:column; }
+  .screen.active{ display:flex; }
+  .brand{ text-align:center; margin-bottom: 8px; }
+  .brand h1{ font-size: 56px; line-height: 0.95; margin: 0; color: var(--text); }
+  .brand h1 span{ color: var(--red); }
+  .brand p{ color: var(--muted); font-size: 13px; margin: 8px 0 0; letter-spacing: 0.08em; text-transform: uppercase; }
+
+  .panel{ background: var(--panel); border: 1px solid var(--wire); border-radius: 4px; padding: 20px; margin-top: 24px; }
+  .panel-label{ font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; display:flex; justify-content:space-between; align-items:center; }
+
+  /* setup screen */
+  .add-row{ display:flex; gap:8px; }
+  input[type=text]{
+    flex:1; background: var(--panel-2); border:1px solid var(--wire); color: var(--text);
+    font-family:'Space Mono', monospace; font-size:15px; padding: 12px 14px; border-radius:3px; outline:none;
+  }
+  input[type=text]:focus{ border-color: var(--amber); }
+  .btn{
+    font-family:'Big Shoulders Display', sans-serif; font-weight:700; text-transform:uppercase; letter-spacing:0.04em;
+    background: transparent; color: var(--text); border: 1px solid var(--wire); border-radius: 3px;
+    padding: 12px 18px; cursor:pointer; font-size:15px; transition: all 0.15s;
+  }
+  .btn:hover{ border-color: var(--amber); color: var(--amber); }
+  .btn:disabled{ opacity:0.35; cursor:not-allowed; }
+  .btn-add{ border-color: var(--green-dim); color: var(--green); }
+  .btn-add:hover{ border-color: var(--green); }
+  .btn-big{
+    width:100%; font-size: 26px; padding: 18px; margin-top: 28px; border-width:2px;
+    border-color: var(--red-dim); color: var(--red);
+  }
+  .btn-big:hover:not(:disabled){ border-color: var(--red); background: rgba(255,61,31,0.08); }
+
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; margin-top: 14px; }
+  .chip{
+    display:flex; align-items:center; gap:8px; background: var(--panel-2); border:1px solid var(--wire);
+    border-radius: 3px; padding: 8px 10px 8px 12px; font-size: 14px;
+  }
+  .chip button{
+    background:none; border:none; color: var(--muted); cursor:pointer; font-size: 15px; line-height:1; padding:0;
+  }
+  .chip button:hover{ color: var(--red); }
+  .hint{ font-size: 12px; color: var(--muted); margin-top: 10px; }
+
+  /* game screen */
+  .status-row{ display:flex; justify-content:space-between; align-items:center; font-size:12px; letter-spacing:0.1em; text-transform:uppercase; color: var(--muted); margin-bottom: 18px; }
+  .status-row .count{ color: var(--green); }
+
+  .bomb-stage{ display:flex; justify-content:center; margin: 10px 0 10px; position:relative; }
+  .bomb-svg{ filter: drop-shadow(0 0 18px rgba(255,61,31,0.15)); }
+  .light{ animation: pulse 1.4s infinite; transform-origin: center; }
+  @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:0.25; } }
+
+  .timer-badge{
+    position:absolute; top:-6px; right: calc(50% - 100px);
+    width:44px; height:44px; border-radius:50%; border:2px solid var(--green-dim);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Big Shoulders Display', sans-serif; font-weight:900; font-size:18px; color: var(--green);
+    background: var(--panel); transition: border-color 0.2s, color 0.2s;
+  }
+  .timer-badge.low{ border-color: var(--red-dim); color: var(--red); }
+
+  .holder{ text-align:center; margin: 4px 0 4px; }
+  .holder .label{ font-size: 11px; letter-spacing:0.15em; text-transform:uppercase; color: var(--muted); }
+  .holder .name{ font-size: 34px; color: var(--amber); margin: 2px 0 0; }
+
+  .tags{ display:flex; gap:8px; justify-content:center; margin: 18px 0 12px; }
+  .tag{ font-size:11px; letter-spacing:0.1em; text-transform:uppercase; padding: 5px 10px; border-radius: 3px; border:1px solid var(--wire); color: var(--muted); }
+  .tag.diff-easy{ color: var(--green); border-color: var(--green-dim); }
+  .tag.diff-medium{ color: var(--amber); border-color: #6b4a06; }
+  .tag.diff-hard{ color: var(--red); border-color: var(--red-dim); }
+
+  .question-box{ background: var(--panel); border: 1px solid var(--wire); border-radius: 4px; padding: 26px 22px; text-align:center; }
+  .question-text{ font-family:'Cairo', sans-serif; direction: rtl; font-size: 20px; line-height:1.7; color: var(--text); margin: 0; font-weight:600; }
+  .answer-text{ font-family:'Cairo', sans-serif; direction: rtl; margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--wire); color: var(--green); font-size: 17px; display:none; }
+  .answer-text.shown{ display:block; }
+  .answer-text .label-en{ font-family:'Space Mono', monospace; direction: ltr; display:inline-block; color: var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:0.1em; margin-left:8px; }
+
+  .reveal-btn{ width:100%; margin-top: 18px; border-color: var(--green-dim); color: var(--green); font-size: 18px; padding: 14px; }
+  .reveal-btn:hover{ border-color: var(--green); background: rgba(53,255,110,0.06); }
+
+  .judge-block{ display:none; gap: 10px; margin-top: 18px; }
+  .judge-block.shown{ display:grid; grid-template-columns: 1fr 1fr; }
+  .judge-btn{ font-size: 17px; padding: 14px; }
+  .judge-btn.correct{ border-color: var(--green-dim); color: var(--green); }
+  .judge-btn.correct:hover{ border-color: var(--green); background: rgba(53,255,110,0.06); }
+  .judge-btn.wrong{ border-color: var(--red-dim); color: var(--red); }
+  .judge-btn.wrong:hover{ border-color: var(--red); background: rgba(255,61,31,0.08); }
+
+  .next-block{ margin-top: 22px; display:none; }
+  .next-block.shown{ display:block; }
+  .next-label{ text-align:center; font-size: 12px; letter-spacing:0.12em; text-transform:uppercase; color: var(--muted); margin-bottom: 12px; }
+  .player-grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(120px,1fr)); gap: 10px; }
+  .player-btn{ font-size: 16px; padding: 14px 8px; }
+  .player-btn:hover{ border-color: var(--amber); color: var(--amber); background: rgba(255,177,0,0.06); }
+
+  /* boom screen */
+  .boom-screen{ align-items:center; justify-content:center; text-align:center; }
+  .boom-word{ font-size: 84px; color: var(--red); margin: 0; line-height:1; }
+  .shake{ animation: shake 0.5s; }
+  @keyframes shake{
+    0%,100%{ transform: translate(0,0); }
+    20%{ transform: translate(-6px,4px); }
+    40%{ transform: translate(6px,-4px); }
+    60%{ transform: translate(-4px,-4px); }
+    80%{ transform: translate(4px,4px); }
+  }
+  .flash{ position:fixed; inset:0; background: #fff; opacity:0; pointer-events:none; z-index: 50; }
+  .flash.go{ animation: flash 0.35s ease-out; }
+  @keyframes flash{ 0%{ opacity:0.9; } 100%{ opacity:0; } }
+
+  .boom-holder{ font-size: 30px; color: var(--amber); margin: 14px 0 4px; }
+  .boom-sub{ color: var(--muted); font-size: 13px; margin: 0 0 6px; }
+  .boom-stats{ color: var(--green); font-size: 13px; margin: 0 0 10px; }
+  .remaining-line{ color: var(--text); font-size: 14px; margin: 0 0 28px; max-width: 420px; }
+  .remaining-line.winner{ color: var(--amber); font-size: 20px; font-weight:700; }
+
+  footer.sig{ text-align:center; color: var(--wire); font-size: 11px; margin-top: 40px; letter-spacing: 0.1em; }
+</style>
+</head>
+<body>
+
+<div class="flash" id="flash"></div>
+
+<div class="wrap">
+
+  <!-- SETUP SCREEN -->
+  <div class="screen active" id="screen-setup">
+    <div class="brand">
+      <h1>SHORT<br><span>FUSE</span></h1>
+      <p>answer the question — or hold the bomb when it blows</p>
+    </div>
+
+    <div class="panel">
+      <p class="panel-label"><span>Squad roster</span><span id="player-count">0 players</span></p>
+      <div class="add-row">
+        <input type="text" id="name-input" placeholder="type a name and hit add" maxlength="18">
+        <button class="btn btn-add" id="add-btn">ADD</button>
+      </div>
+      <div class="chips" id="chips"></div>
+      <p class="hint">need at least 2 players. the bomb's timer is random and hidden — nobody knows which question is the last one. each question also has 10 seconds on the clock. whoever's holding it when it blows is eliminated — the game keeps going with the rest of the squad until only one player is left standing.</p>
+    </div>
+
+    <button class="btn btn-big" id="start-btn" disabled>ARM THE BOMB</button>
+    <footer class="sig">SHORT FUSE — a live trivia hot potato</footer>
+  </div>
+
+  <!-- GAME SCREEN -->
+  <div class="screen" id="screen-game">
+    <div class="status-row">
+      <span>Round <span id="round-num">1</span></span>
+      <span class="count"><span id="players-left"></span> in the squad</span>
+    </div>
+
+    <div class="bomb-stage">
+      <svg class="bomb-svg" width="140" height="140" viewBox="0 0 140 140">
+        <ellipse cx="70" cy="82" rx="46" ry="42" fill="#1a201a" stroke="#2a332a" stroke-width="3"/>
+        <rect x="60" y="30" width="20" height="26" rx="4" fill="#1a201a" stroke="#2a332a" stroke-width="3"/>
+        <path d="M70 30 Q84 10 100 16" stroke="#8a6a2a" stroke-width="4" fill="none" stroke-linecap="round"/>
+        <circle class="light" id="bomb-light" cx="100" cy="15" r="7" fill="#ff3d1f"/>
+        <circle cx="70" cy="82" r="8" fill="#0a0d0a" stroke="#3a443a" stroke-width="2"/>
+      </svg>
+      <div class="timer-badge" id="timer-badge">10</div>
+    </div>
+
+    <div class="holder">
+      <p class="label">holding the bomb</p>
+      <p class="name" id="holder-name">—</p>
+    </div>
+
+    <div class="tags">
+      <span class="tag" id="tag-category">CATEGORY</span>
+      <span class="tag" id="tag-difficulty">DIFFICULTY</span>
+    </div>
+
+    <div class="question-box">
+      <p class="question-text" id="question-text">جارٍ تحميل السؤال...</p>
+      <p class="answer-text" id="answer-text"></p>
+      <button class="btn reveal-btn" id="reveal-btn">REVEAL ANSWER</button>
+      <div class="judge-block" id="judge-block">
+        <button class="btn judge-btn correct" id="correct-btn">CORRECT</button>
+        <button class="btn judge-btn wrong" id="wrong-btn">WRONG</button>
+      </div>
+    </div>
+
+    <div class="next-block" id="next-block">
+      <p class="next-label">who answers next?</p>
+      <div class="player-grid" id="player-grid"></div>
+    </div>
+  </div>
+
+  <!-- BOOM SCREEN -->
+  <div class="screen boom-screen" id="screen-boom">
+    <h1 class="display boom-word" id="boom-word">BOOM</h1>
+    <p class="boom-holder" id="boom-holder-name">—</p>
+    <p class="boom-sub" id="boom-sub">was holding the bomb when it went off.</p>
+    <p class="boom-stats" id="boom-stats"></p>
+    <p class="remaining-line" id="remaining-line"></p>
+    <button class="btn btn-big" id="boom-action-btn" style="max-width:280px;">PLAY AGAIN</button>
+  </div>
+
+</div>
+
+<script>
+(function(){
+
+  var DIFF_LABELS = { easy: 'EASY', medium: 'MEDIUM', hard: 'HARD' };
+  var QUESTION_SECONDS = 10;
+
+  var QUESTIONS = [
+    {c:"Geography", d:"easy", q:"ما هي عاصمة فرنسا؟", a:"باريس"},
+    {c:"Geography", d:"easy", q:"في أي قارة تقع صحراء الصحراء الكبرى؟", a:"أفريقيا"},
+    {c:"Geography", d:"medium", q:"ما هي أكبر دولة في العالم من حيث المساحة؟", a:"روسيا"},
+    {c:"Geography", d:"hard", q:"ما هي الدولة الوحيدة التي تحد كلًا من فرنسا وإسبانيا؟", a:"أندورا"},
+    {c:"Geography", d:"medium", q:"ما هي أصغر دولة في العالم؟", a:"الفاتيكان"},
+    {c:"Geography", d:"hard", q:"ما الاسم القديم لدولة إثيوبيا؟", a:"الحبشة"},
+    {c:"Geography", d:"easy", q:"ما هو أطول نهر في العالم؟", a:"نهر النيل"},
+    {c:"Geography", d:"medium", q:"ما هي أكبر جزيرة في العالم؟", a:"جرينلاند"},
+    {c:"Geography", d:"easy", q:"كم عدد قارات العالم؟", a:"سبع قارات"},
+    {c:"Geography", d:"hard", q:"ما هو أعمق خندق محيطي في العالم؟", a:"خندق ماريانا"},
+
+    {c:"Science", d:"easy", q:"ما هو الكوكب المعروف بالكوكب الأحمر؟", a:"المريخ"},
+    {c:"Science", d:"easy", q:"ما الغاز الذي تمتصه النباتات من الهواء؟", a:"ثاني أكسيد الكربون"},
+    {c:"Science", d:"medium", q:"ما هي أصلب مادة طبيعية على الأرض؟", a:"الألماس"},
+    {c:"Science", d:"hard", q:"ما اسم الجسيم المسؤول عن إعطاء الجسيمات الأخرى كتلتها؟", a:"بوزون هيغز"},
+    {c:"Science", d:"medium", q:"ما هو الرمز الكيميائي للذهب؟", a:"Au"},
+    {c:"Science", d:"hard", q:"ما اسم العملية التي تنتج بها النجوم طاقتها؟", a:"الاندماج النووي"},
+    {c:"Science", d:"easy", q:"كم عدد عظام جسم الإنسان البالغ؟", a:"206 عظمة"},
+    {c:"Science", d:"medium", q:"ما هو العضو المسؤول عن إفراز الإنسولين في جسم الإنسان؟", a:"البنكرياس"},
+    {c:"Science", d:"easy", q:"ما هو أقرب كوكب إلى الشمس؟", a:"عطارد"},
+    {c:"Science", d:"medium", q:"ما هي وحدة قياس القوة في النظام الدولي؟", a:"نيوتن"},
+
+    {c:"History", d:"easy", q:"في أي عام انتهت الحرب العالمية الثانية؟", a:"1945"},
+    {c:"History", d:"medium", q:"من هو أول إمبراطور لروما؟", a:"أغسطس"},
+    {c:"History", d:"hard", q:"ما اسم المعاهدة التي أنهت رسميًا الحرب العالمية الأولى عام 1919؟", a:"معاهدة فرساي"},
+    {c:"History", d:"easy", q:"من هو أول رئيس للولايات المتحدة الأمريكية؟", a:"جورج واشنطن"},
+    {c:"History", d:"medium", q:"ما هو السور الذي سقط عام 1989 رمزًا لانتهاء الحرب الباردة؟", a:"سور برلين"},
+    {c:"History", d:"hard", q:"في أي مدينة مصرية كانت تقع منارة قديمة من عجائب الدنيا السبع؟", a:"الإسكندرية"},
+    {c:"History", d:"medium", q:"من هو القائد الذي فتح الأندلس عام 711م؟", a:"طارق بن زياد"},
+    {c:"History", d:"easy", q:"في أي مدينة نزل الوحي على النبي محمد صلى الله عليه وسلم أول مرة؟", a:"مكة المكرمة"},
+
+    {c:"Entertainment", d:"easy", q:"من أخرج فيلم 'Jaws' (الفك المفترس)؟", a:"ستيفن سبيلبرغ"},
+    {c:"Entertainment", d:"easy", q:"ما اسم مدرسة السحر في سلسلة هاري بوتر؟", a:"هوغوورتس"},
+    {c:"Entertainment", d:"medium", q:"أي فرقة موسيقية أصدرت ألبوم 'Abbey Road'؟", a:"البيتلز"},
+    {c:"Entertainment", d:"hard", q:"من ألّف الأوبرا 'الناي السحري'؟", a:"فولفغانغ أماديوس موتسارت"},
+    {c:"Entertainment", d:"medium", q:"من أدى شخصية الجوكر في فيلم 'The Dark Knight'؟", a:"هيث ليدجر"},
+    {c:"Entertainment", d:"easy", q:"ما لون شخصية سبونج بوب سكوير بانتس؟", a:"الأصفر"},
+
+    {c:"Sports", d:"easy", q:"كم عدد لاعبي فريق كرة القدم على أرض الملعب؟", a:"11 لاعبًا"},
+    {c:"Sports", d:"medium", q:"في أي دولة أُقيمت أولمبياد 2016 الصيفية؟", a:"البرازيل"},
+    {c:"Sports", d:"hard", q:"من صاحب الرقم القياسي لأكثر ألقاب فردية في بطولات الغراند سلام للرجال حتى 2024؟", a:"نوفاك ديوكوفيتش"},
+    {c:"Sports", d:"easy", q:"ما هي الرياضة التي تُلعب في بطولة ويمبلدون؟", a:"التنس"},
+    {c:"Sports", d:"medium", q:"كم عدد الحلقات في شعار الألعاب الأولمبية؟", a:"خمس حلقات"},
+    {c:"Sports", d:"medium", q:"كم عدد أشواط مباراة كرة القدم بدون وقت إضافي؟", a:"شوطان (45 دقيقة لكل شوط)"},
+
+    {c:"General Knowledge", d:"easy", q:"كم عدد أيام السنة الكبيسة؟", a:"366 يومًا"},
+    {c:"General Knowledge", d:"easy", q:"ما هو أطول حيوان في العالم؟", a:"الزرافة"},
+    {c:"General Knowledge", d:"medium", q:"ما هي عملة اليابان؟", a:"الين"},
+    {c:"General Knowledge", d:"hard", q:"ما هو الثدي الوحيد القادر على الطيران الحقيقي؟", a:"الخفاش"},
+    {c:"General Knowledge", d:"medium", q:"كم عدد أوتار آلة الكمان التقليدية؟", a:"4 أوتار"},
+    {c:"General Knowledge", d:"hard", q:"ما هي وحدة قياس المقاومة الكهربائية؟", a:"الأوم"},
+    {c:"General Knowledge", d:"easy", q:"ماذا تجمع النحلة من الأزهار لصنع العسل؟", a:"الرحيق"},
+    {c:"General Knowledge", d:"medium", q:"ما هو أكبر عضو في جسم الإنسان؟", a:"الجلد"},
+
+    {c:"Art", d:"medium", q:"من رسم لوحة 'ليلة النجوم'؟", a:"فينسنت فان غوخ"},
+    {c:"Art", d:"hard", q:"ما هي الحركة الفنية التي ارتبط بها سلفادور دالي؟", a:"السريالية"},
+    {c:"Art", d:"easy", q:"ما هي الألوان الأساسية الثلاثة؟", a:"الأحمر والأزرق والأصفر"},
+
+    {c:"Food", d:"easy", q:"ما هي الفاكهة الأساسية في تحضير الغواكامولي؟", a:"الأفوكادو"},
+    {c:"Food", d:"medium", q:"ما هو المكوّن الرئيسي في الحمّص التقليدي؟", a:"الحمّص (الحبوب)"},
+    {c:"Food", d:"hard", q:"ما اسم مشروب الشاي المخمّر الذي نشأ في شرق آسيا؟", a:"الكومبوتشا"},
+    {c:"Food", d:"easy", q:"من أي نبات يُستخرج السكر بشكل أساسي؟", a:"قصب السكر وبنجر السكر"},
+
+    {c:"Technology", d:"easy", q:"ماذا تعني اختصار 'www'؟", a:"الشبكة العنكبوتية العالمية"},
+    {c:"Technology", d:"medium", q:"ما هي الشركة التي صنعت هاتف آيفون؟", a:"آبل"},
+    {c:"Technology", d:"hard", q:"في أي عام أُرسل أول بريد إلكتروني؟", a:"1971"},
+    {c:"Technology", d:"medium", q:"ما اسم أول شبكة تواصل اجتماعي انتشرت عالميًا قبل فيسبوك؟", a:"ماي سبيس"},
+    {c:"Technology", d:"easy", q:"ما اسم نظام التشغيل الذي طورته شركة مايكروسوفت؟", a:"ويندوز"},
+
+    {c:"Geography", d:"easy", q:"ما هي عاصمة اليابان؟", a:"طوكيو"},
+    {c:"Geography", d:"easy", q:"في أي قارة تقع مصر بشكل أساسي؟", a:"أفريقيا"},
+    {c:"Geography", d:"medium", q:"ما هي عاصمة أستراليا؟", a:"كانبيرا"},
+    {c:"Geography", d:"medium", q:"ما هو أعلى جبل في العالم؟", a:"جبل إفرست"},
+    {c:"Geography", d:"hard", q:"ما هي الدولة الوحيدة التي تقع في نصفي الكرة الأرضية الشمالي والجنوبي والشرقي والغربي معًا؟", a:"كيريباتي"},
+    {c:"Geography", d:"easy", q:"ما هي عاصمة المملكة المتحدة؟", a:"لندن"},
+    {c:"Geography", d:"medium", q:"ما هو أكبر محيط في العالم؟", a:"المحيط الهادئ"},
+    {c:"Geography", d:"hard", q:"ما هي أصغر قارة في العالم من حيث المساحة؟", a:"أستراليا"},
+    {c:"Geography", d:"easy", q:"ما هي عاصمة المملكة العربية السعودية؟", a:"الرياض"},
+    {c:"Geography", d:"medium", q:"ما هو أطول سلسلة جبال فوق سطح الأرض؟", a:"جبال الأنديز"},
+    {c:"Geography", d:"easy", q:"في أي قارة تقع دولة البرازيل؟", a:"أمريكا الجنوبية"},
+    {c:"Geography", d:"hard", q:"ما اسم البحر الذي يُعرف بأنه لا يحتوي على أي منفذ للمحيط ويُعد أكثر بحيرة ملوحة؟", a:"البحر الميت"},
+
+    {c:"Science", d:"easy", q:"كم عدد كواكب المجموعة الشمسية؟", a:"8 كواكب"},
+    {c:"Science", d:"easy", q:"ما هو الغاز الذي يحتاجه الإنسان للتنفس؟", a:"الأكسجين"},
+    {c:"Science", d:"medium", q:"ما هي وحدة قياس شدة التيار الكهربائي؟", a:"الأمبير"},
+    {c:"Science", d:"medium", q:"من هو العالم الذي اكتشف قانون الجاذبية؟", a:"إسحاق نيوتن"},
+    {c:"Science", d:"hard", q:"ما هي سرعة الضوء تقريبًا بالكيلومتر في الثانية؟", a:"300,000 كم في الثانية"},
+    {c:"Science", d:"hard", q:"من هو صاحب نظرية النسبية؟", a:"ألبرت أينشتاين"},
+    {c:"Science", d:"easy", q:"ما هو العضو المسؤول عن ضخ الدم في جسم الإنسان؟", a:"القلب"},
+    {c:"Science", d:"medium", q:"ما اسم العملية التي تحول بها النباتات ضوء الشمس إلى طاقة؟", a:"التمثيل الضوئي"},
+    {c:"Science", d:"easy", q:"كم عدد الحواس الأساسية لدى الإنسان؟", a:"خمس حواس"},
+    {c:"Science", d:"medium", q:"ما هو الغاز الذي يُشكّل الجزء الأكبر من الغلاف الجوي للأرض؟", a:"النيتروجين"},
+    {c:"Science", d:"hard", q:"من هو العالم الذي اكتشف مادة البنسلين؟", a:"ألكسندر فليمنغ"},
+    {c:"Science", d:"easy", q:"ماذا تسمى حالة الماء عند تجمده؟", a:"الجليد"},
+
+    {c:"History", d:"easy", q:"من هو مكتشف قارة أمريكا؟", a:"كريستوفر كولومبوس"},
+    {c:"History", d:"medium", q:"في أي عام سقطت الدولة العثمانية رسميًا؟", a:"1922"},
+    {c:"History", d:"hard", q:"من هو مؤسس الدولة الأموية؟", a:"معاوية بن أبي سفيان"},
+    {c:"History", d:"easy", q:"في أي عام بدأت الثورة الفرنسية؟", a:"1789"},
+    {c:"History", d:"medium", q:"من هو القائد المسلم الذي فتح القسطنطينية؟", a:"السلطان محمد الفاتح"},
+    {c:"History", d:"hard", q:"في أي معركة انتصر صلاح الدين الأيوبي على الصليبيين؟", a:"معركة حطين"},
+    {c:"History", d:"easy", q:"من هو أول خليفة في الإسلام؟", a:"أبو بكر الصديق"},
+    {c:"History", d:"medium", q:"في أي عام تم توحيد المملكة العربية السعودية؟", a:"1932"},
+    {c:"History", d:"hard", q:"من هو مؤسس الدولة العباسية؟", a:"أبو العباس السفاح"},
+    {c:"History", d:"easy", q:"في أي عام انتهت الحرب العالمية الأولى؟", a:"1918"},
+    {c:"History", d:"medium", q:"من هي ملكة مصر القديمة التي تحالفت مع يوليوس قيصر؟", a:"كليوباترا"},
+    {c:"History", d:"hard", q:"ما اسم الحضارة التي بنت أهرامات الجيزة؟", a:"الحضارة المصرية القديمة"},
+
+    {c:"Entertainment", d:"easy", q:"ما اسم شخصية الفأر الكرتونية الشهيرة التي أنتجتها شركة ديزني؟", a:"ميكي ماوس"},
+    {c:"Entertainment", d:"medium", q:"من غنّى أغنية 'Thriller'؟", a:"مايكل جاكسون"},
+    {c:"Entertainment", d:"hard", q:"من أخرج فيلم 'Inception'؟", a:"كريستوفر نولان"},
+    {c:"Entertainment", d:"medium", q:"من لعب دور 'جاك' في فيلم 'Titanic'؟", a:"ليوناردو دي كابريو"},
+    {c:"Entertainment", d:"hard", q:"ما هو أول فيلم رسوم متحركة طويل أنتجته شركة ديزني؟", a:"سنو وايت والأقزام السبعة"},
+    {c:"Entertainment", d:"easy", q:"ما اسم الشخصية الكرتونية الإسفنجية الصفراء التي تعيش تحت الماء؟", a:"سبونج بوب"},
+    {c:"Entertainment", d:"medium", q:"من مغني أغنية 'Shape of You'؟", a:"إد شيران"},
+    {c:"Entertainment", d:"hard", q:"من فاز بجائزة الأوسكار لأفضل ممثل عن فيلم 'The Revenant'؟", a:"ليوناردو دي كابريو"},
+    {c:"Entertainment", d:"easy", q:"ما اسم القط الذي يطارد الفأر جيري في الرسوم المتحركة الشهيرة؟", a:"توم"},
+
+    {c:"Sports", d:"easy", q:"كم عدد اللاعبين في فريق كرة السلة على أرض الملعب؟", a:"5 لاعبين"},
+    {c:"Sports", d:"medium", q:"في أي دولة أُقيمت كأس العالم لكرة القدم 2022؟", a:"قطر"},
+    {c:"Sports", d:"hard", q:"من هو الهداف التاريخي لبطولات كأس العالم لكرة القدم حتى 2022؟", a:"ميروسلاف كلوزه"},
+    {c:"Sports", d:"easy", q:"ما اسم الرياضة التي يُستخدم فيها مضرب وكرة صغيرة على طاولة؟", a:"تنس الطاولة"},
+    {c:"Sports", d:"medium", q:"كم عدد اللاعبين في فريق الكرة الطائرة؟", a:"6 لاعبين"},
+    {c:"Sports", d:"hard", q:"أي لاعب فاز بأكبر عدد من جوائز الكرة الذهبية حتى 2023؟", a:"ليونيل ميسي"},
+    {c:"Sports", d:"easy", q:"في أي رياضة تُستخدم عبارة 'ضربة جزاء'؟", a:"كرة القدم"},
+    {c:"Sports", d:"hard", q:"من هو أول لاعب عربي يفوز بجائزة أفضل لاعب في قارة أفريقيا عدة مرات؟", a:"محمد صلاح"},
+    {c:"Sports", d:"easy", q:"كم عدد الأرباع في مباراة كرة السلة الاحترافية؟", a:"4 أرباع"},
+
+    {c:"General Knowledge", d:"easy", q:"كم عدد أيام الأسبوع؟", a:"7 أيام"},
+    {c:"General Knowledge", d:"easy", q:"ما هو لون السماء في يوم صافٍ؟", a:"الأزرق"},
+    {c:"General Knowledge", d:"medium", q:"كم عدد حروف اللغة العربية؟", a:"28 حرفًا"},
+    {c:"General Knowledge", d:"medium", q:"ما هي العملة الرسمية للاتحاد الأوروبي؟", a:"اليورو"},
+    {c:"General Knowledge", d:"hard", q:"ما هو أطول جدار بناه الإنسان في التاريخ؟", a:"سور الصين العظيم"},
+    {c:"General Knowledge", d:"easy", q:"كم عدد أشهر السنة الميلادية؟", a:"12 شهرًا"},
+    {c:"General Knowledge", d:"medium", q:"ما اسم أكبر صحراء حارة في العالم؟", a:"الصحراء الكبرى"},
+    {c:"General Knowledge", d:"hard", q:"ما هو العنصر الكيميائي الأكثر وفرة في الكون؟", a:"الهيدروجين"},
+    {c:"General Knowledge", d:"easy", q:"كم عدد أرجل العنكبوت؟", a:"8 أرجل"},
+    {c:"General Knowledge", d:"medium", q:"ما اسم أطول نهر في قارة آسيا؟", a:"نهر اليانغتسي"},
+    {c:"General Knowledge", d:"hard", q:"كم عدد الدول التي تتخذ من اللغة العربية لغة رسمية تقريبًا؟", a:"أكثر من 20 دولة"},
+    {c:"General Knowledge", d:"easy", q:"ما هو أصغر عدد أولي؟", a:"2"},
+
+    {c:"Art", d:"easy", q:"بأي أداة يُرسم الرسم الزيتي عادة؟", a:"الفرشاة"},
+    {c:"Art", d:"medium", q:"من نحت تمثال 'داود' الشهير؟", a:"مايكل أنجلو"},
+    {c:"Art", d:"hard", q:"ما اسم المدرسة الفنية التي تتميز بتفكيك الأشكال إلى مكعبات وأشكال هندسية؟", a:"التكعيبية"},
+    {c:"Art", d:"easy", q:"ما اسم أشهر لوحة رسمها ليوناردو دافنشي؟", a:"الموناليزا"},
+    {c:"Art", d:"medium", q:"من رسم لوحة 'الصرخة'؟", a:"إدفارد مونك"},
+    {c:"Art", d:"hard", q:"ما هي الحقبة الفنية التي سبقت عصر النهضة مباشرة في أوروبا؟", a:"العصور الوسطى (الفن القوطي)"},
+
+    {c:"Food", d:"easy", q:"ما هو المكوّن الرئيسي في صناعة الخبز؟", a:"الدقيق"},
+    {c:"Food", d:"medium", q:"من أي حليب يُصنع جبن الحلوم تقليديًا؟", a:"حليب الماعز والأغنام"},
+    {c:"Food", d:"hard", q:"من أي زهرة يُستخرج توابل الزعفران؟", a:"زهرة الزعفران"},
+    {c:"Food", d:"easy", q:"ما اسم الطبق الإيطالي المكوّن من عجينة رقيقة وصلصة الطماطم والجبن؟", a:"البيتزا"},
+    {c:"Food", d:"medium", q:"ما اسم الحلوى العربية المصنوعة من عجينة رقيقة والمكسرات والقطر؟", a:"الكنافة"},
+    {c:"Food", d:"hard", q:"ما هي التوابل الأكثر تداولًا في التجارة العالمية عبر التاريخ؟", a:"الفلفل الأسود"},
+
+    {c:"Technology", d:"easy", q:"ما اسم الاختصار الشائع لتخزين الملفات عبر الإنترنت بدل الجهاز؟", a:"التخزين السحابي"},
+    {c:"Technology", d:"medium", q:"من يُعتبر مؤسس شركة مايكروسوفت؟", a:"بيل غيتس"},
+    {c:"Technology", d:"hard", q:"ما هي اللغة البرمجية الأكثر استخدامًا في تطوير الذكاء الاصطناعي حاليًا؟", a:"بايثون"},
+    {c:"Technology", d:"medium", q:"من هو مؤسس شركة أمازون؟", a:"جيف بيزوس"},
+    {c:"Technology", d:"hard", q:"في أي عام تأسست شركة جوجل؟", a:"1998"},
+    {c:"Technology", d:"easy", q:"ما اسم متصفح الإنترنت الذي طورته شركة جوجل؟", a:"جوجل كروم"},
+    {c:"Technology", d:"medium", q:"ما اسم الشبكة الاجتماعية التي أسسها مارك زوكربيرغ؟", a:"فيسبوك"},
+
+    {c:"Literature", d:"easy", q:"ما هو الاسم الشائع لكتاب الحكايات الشعبية العربية 'ألف ليلة وليلة'؟", a:"ألف ليلة وليلة"},
+    {c:"Literature", d:"medium", q:"من كتب رواية 'مئة عام من العزلة'؟", a:"غابرييل غارسيا ماركيز"},
+    {c:"Literature", d:"hard", q:"من كتب مسرحية 'هاملت'؟", a:"ويليام شكسبير"},
+    {c:"Literature", d:"easy", q:"من مؤلف سلسلة روايات 'هاري بوتر'؟", a:"جي كي رولينغ"},
+    {c:"Literature", d:"medium", q:"من كاتب رواية '1984'؟", a:"جورج أورويل"},
+    {c:"Literature", d:"hard", q:"من كتب ملحمة 'الإلياذة'؟", a:"هوميروس"},
+    {c:"Literature", d:"easy", q:"من مؤلف قصة 'روبنسون كروزو'؟", a:"دانيال ديفو"},
+    {c:"Literature", d:"medium", q:"من كاتب رواية 'الحرافيش'؟", a:"نجيب محفوظ"},
+
+    {c:"Animals", d:"easy", q:"ما هو أسرع حيوان بري في العالم؟", a:"الفهد الصياد"},
+    {c:"Animals", d:"easy", q:"ما هو أكبر حيوان ثديي في العالم؟", a:"الحوت الأزرق"},
+    {c:"Animals", d:"medium", q:"ما اسم الحيوان الذي يُعرف بملك الغابة؟", a:"الأسد"},
+    {c:"Animals", d:"medium", q:"كم عدد قلوب الأخطبوط؟", a:"ثلاثة قلوب"},
+    {c:"Animals", d:"hard", q:"ما هو الحيوان الكبير الوحيد الذي لا يستطيع القفز؟", a:"الفيل"},
+    {c:"Animals", d:"hard", q:"أي حيوان يمتلك أطول رقبة بين الحيوانات؟", a:"الزرافة"},
+    {c:"Animals", d:"easy", q:"ما هو الحيوان المعروف بأنه أفضل صديق للإنسان؟", a:"الكلب"},
+    {c:"Animals", d:"medium", q:"كم عدد أرجل النحلة؟", a:"6 أرجل"},
+
+    {c:"Space", d:"easy", q:"ما اسم المجرة التي تنتمي إليها الأرض؟", a:"درب التبانة"},
+    {c:"Space", d:"easy", q:"من هو أول إنسان مشى على سطح القمر؟", a:"نيل أرمسترونغ"},
+    {c:"Space", d:"medium", q:"كم عدد أقمار كوكب المريخ؟", a:"قمران"},
+    {c:"Space", d:"medium", q:"ما اسم أول قمر صناعي أُطلق إلى الفضاء؟", a:"سبوتنيك 1"},
+    {c:"Space", d:"hard", q:"ما هو أكبر كوكب في المجموعة الشمسية؟", a:"كوكب المشتري"},
+    {c:"Space", d:"hard", q:"كم يستغرق ضوء الشمس تقريبًا للوصول إلى الأرض؟", a:"8 دقائق تقريبًا"},
+    {c:"Space", d:"easy", q:"ما اسم وكالة الفضاء الأمريكية؟", a:"ناسا"},
+    {c:"Space", d:"medium", q:"من هو أول رائد فضاء عربي؟", a:"سلطان بن سلمان آل سعود"},
+
+    {c:"Geography", d:"easy", q:"ما هي عاصمة إيطاليا؟", a:"روما"},
+    {c:"Geography", d:"easy", q:"ما هي عاصمة ألمانيا؟", a:"برلين"},
+    {c:"Geography", d:"medium", q:"ما هو أطول نهر في قارة أوروبا؟", a:"نهر الفولغا"},
+    {c:"Geography", d:"medium", q:"ما اسم أعلى جبل في سلسلة الألب؟", a:"مون بلان"},
+    {c:"Geography", d:"hard", q:"ما هي الدولة التي تضم أكبر عدد من الجزر في العالم؟", a:"السويد"},
+    {c:"Geography", d:"easy", q:"ما هي عاصمة الصين؟", a:"بكين"},
+    {c:"Geography", d:"medium", q:"ما اسم المضيق الذي يفصل بين قارتي آسيا وأفريقيا عبر البحر الأحمر؟", a:"مضيق باب المندب"},
+    {c:"Geography", d:"hard", q:"ما هي أكثر دول العالم اكتظاظًا بالسكان اعتبارًا من عام 2023؟", a:"الهند"},
+    {c:"Geography", d:"easy", q:"ما هي عاصمة كندا؟", a:"أوتاوا"},
+    {c:"Geography", d:"medium", q:"ما اسم أكبر بحيرة عذبة في العالم من حيث المساحة؟", a:"بحيرة سوبيريور"},
+
+    {c:"Science", d:"easy", q:"ما هو الرمز الكيميائي للماء؟", a:"H2O"},
+    {c:"Science", d:"easy", q:"كم عدد حجرات القلب البشري؟", a:"4 حجرات"},
+    {c:"Science", d:"medium", q:"من هو العالم الذي وضع الجدول الدوري للعناصر؟", a:"ديمتري مندليف"},
+    {c:"Science", d:"medium", q:"ما هي وحدة قياس الطاقة في النظام الدولي؟", a:"الجول"},
+    {c:"Science", d:"hard", q:"ما اسم أصغر وحدة بناء في الكائنات الحية؟", a:"الخلية"},
+    {c:"Science", d:"hard", q:"من هو العالم المرتبط بتجربة الطائرة الورقية الشهيرة لدراسة الكهرباء؟", a:"بنجامين فرانكلين"},
+    {c:"Science", d:"easy", q:"ما هو الكوكب المعروف بحلقاته البارزة؟", a:"زحل"},
+    {c:"Science", d:"medium", q:"كم عدد الكروموسومات في الخلية البشرية؟", a:"46 كروموسومًا"},
+    {c:"Science", d:"hard", q:"ما اسم الغاز النبيل الأخف من الهواء والمستخدم في نفخ المناطيد؟", a:"الهيليوم"},
+    {c:"Science", d:"easy", q:"ما هي حالة المادة التي ليس لها شكل أو حجم ثابت؟", a:"الغاز"},
+
+    {c:"History", d:"easy", q:"من هو القائد الفرنسي الذي غزا معظم أوروبا في أوائل القرن التاسع عشر؟", a:"نابليون بونابرت"},
+    {c:"History", d:"medium", q:"في أي عام بدأت الحرب العالمية الثانية؟", a:"1939"},
+    {c:"History", d:"hard", q:"ما اسم الوثيقة التي وقعها الملك جون في إنجلترا عام 1215 وتُعد أساس الحقوق الدستورية الحديثة؟", a:"الماغنا كارتا"},
+    {c:"History", d:"medium", q:"في أي عام حصلت الجزائر على استقلالها من فرنسا؟", a:"1962"},
+    {c:"History", d:"hard", q:"ما اسم الإمبراطورية التي حكمت معظم الشرق الأوسط وشمال أفريقيا لقرون وسقطت بعد الحرب العالمية الأولى؟", a:"الدولة العثمانية"},
+    {c:"History", d:"easy", q:"من هو أول إنسان يصل إلى الفضاء؟", a:"يوري غاغارين"},
+    {c:"History", d:"medium", q:"في أي عام سقط الاتحاد السوفيتي؟", a:"1991"},
+    {c:"History", d:"hard", q:"من هو مؤسس علم الاجتماع وصاحب كتاب 'المقدمة'؟", a:"ابن خلدون"},
+    {c:"History", d:"easy", q:"ما اسم الملك المصري الشاب الذي اشتهر قبره بالكنوز الذهبية؟", a:"توت عنخ آمون"},
+    {c:"History", d:"medium", q:"من هو أول رئيس لجمهورية مصر بعد إعلان الجمهورية؟", a:"محمد نجيب"},
+
+    {c:"Entertainment", d:"easy", q:"ما اسم سلسلة الأفلام الفضائية الشهيرة التي يظهر فيها 'دارث فيدر'؟", a:"حرب النجوم"},
+    {c:"Entertainment", d:"medium", q:"من لعب دور 'الرجل الحديدي' في أفلام مارفل؟", a:"روبرت داوني جونيور"},
+    {c:"Entertainment", d:"hard", q:"من هو مخرج ثلاثية 'The Lord of the Rings'؟", a:"بيتر جاكسون"},
+    {c:"Entertainment", d:"easy", q:"ما اسم الشخصية الخارقة التي ترتدي زيًا أحمر وأزرق وتنسج الشباك؟", a:"الرجل العنكبوت"},
+    {c:"Entertainment", d:"medium", q:"من غنّى أغنية 'Bohemian Rhapsody' مع فرقته؟", a:"فرقة كوين بقيادة فريدي ميركوري"},
+    {c:"Entertainment", d:"hard", q:"ما هو أول فيلم يحقق مليار دولار في شباك التذاكر العالمي؟", a:"تايتانك"},
+    {c:"Entertainment", d:"easy", q:"ما اسم البطة الكرتونية الشهيرة سريعة الغضب التي أنتجتها ديزني؟", a:"دونالد داك"},
+    {c:"Entertainment", d:"medium", q:"من أدى دور 'هاري بوتر' في سلسلة الأفلام؟", a:"دانيال رادكليف"},
+    {c:"Entertainment", d:"hard", q:"ما اسم المسلسل الذي يدور حول صراع عائلات على العرش الحديدي؟", a:"صراع العروش"},
+    {c:"Entertainment", d:"easy", q:"ما اسم لعبة الفيديو الشهيرة التي بطلها سبّاك إيطالي ذو شارب؟", a:"ماريو"},
+
+    {c:"Sports", d:"easy", q:"كم عدد المجموعات القصوى في مباراة تنس رجالية ببطولة كبرى؟", a:"5 مجموعات"},
+    {c:"Sports", d:"medium", q:"أي دولة فازت بأكبر عدد من كؤوس العالم لكرة القدم حتى 2022؟", a:"البرازيل"},
+    {c:"Sports", d:"hard", q:"من هو أول رياضي يفوز بثماني ميداليات ذهبية أولمبية في دورة واحدة؟", a:"مايكل فيلبس"},
+    {c:"Sports", d:"easy", q:"ما اسم الرياضة التي تُلعب على الجليد بمضارب منحنية؟", a:"هوكي الجليد"},
+    {c:"Sports", d:"medium", q:"كم عدد اللاعبين في فريق الرغبي (الاتحاد)؟", a:"15 لاعبًا"},
+    {c:"Sports", d:"hard", q:"من هو أصغر بطل عالمي في الوزن الثقيل للملاكمة في التاريخ؟", a:"مايك تايسون"},
+    {c:"Sports", d:"easy", q:"في أي رياضة يُستخدم مصطلح 'هدف ذاتي'؟", a:"كرة القدم"},
+    {c:"Sports", d:"medium", q:"ما هي الدول المستضيفة لكأس العالم لكرة القدم 2026؟", a:"الولايات المتحدة وكندا والمكسيك"},
+    {c:"Sports", d:"hard", q:"من هو صاحب الرقم القياسي العالمي في سباق 100 متر عدو؟", a:"أوسين بولت"},
+    {c:"Sports", d:"easy", q:"كم عدد الحفر في جولة الغولف الكاملة؟", a:"18 حفرة"},
+
+    {c:"General Knowledge", d:"easy", q:"كم عدد ألوان قوس قزح؟", a:"7 ألوان"},
+    {c:"General Knowledge", d:"medium", q:"ما اسم أكبر جزيرة في قارة آسيا؟", a:"بورنيو"},
+    {c:"General Knowledge", d:"hard", q:"ما هو أثقل عضو داخلي في جسم الإنسان؟", a:"الكبد"},
+    {c:"General Knowledge", d:"easy", q:"كم عدد أصابع اليد الواحدة؟", a:"5 أصابع"},
+    {c:"General Knowledge", d:"medium", q:"من هما أول شخصين تسلقا قمة إيفرست بنجاح؟", a:"إدموند هيلاري وتنزينغ نورجاي"},
+    {c:"General Knowledge", d:"hard", q:"ما اسم أقدم جامعة لا تزال قائمة في العالم؟", a:"جامعة القرويين في المغرب"},
+    {c:"General Knowledge", d:"easy", q:"كم عدد أيام شهر فبراير في السنة العادية؟", a:"28 يومًا"},
+    {c:"General Knowledge", d:"medium", q:"ما هي العملة الرسمية للمملكة المتحدة؟", a:"الجنيه الإسترليني"},
+    {c:"General Knowledge", d:"hard", q:"ما هي من أقدم المدن المأهولة باستمرار في العالم؟", a:"دمشق"},
+    {c:"General Knowledge", d:"easy", q:"كم عدد أرجل الإنسان؟", a:"رجلان"},
+
+    {c:"Art", d:"easy", q:"ما اسم الأداة المستخدمة للنحت في الحجر أو الخشب؟", a:"الإزميل"},
+    {c:"Art", d:"medium", q:"من رسم لوحة 'الحرية تقود الشعب'؟", a:"أوجين ديلاكروا"},
+    {c:"Art", d:"hard", q:"من هما الفنانان اللذان أسسا الحركة التكعيبية؟", a:"بابلو بيكاسو وجورج براك"},
+    {c:"Art", d:"easy", q:"بأي مادة تُصنع معظم التماثيل الكلاسيكية القديمة؟", a:"الرخام"},
+    {c:"Art", d:"medium", q:"من رسم سقف كنيسة سيستين الشهير في الفاتيكان؟", a:"مايكل أنجلو"},
+    {c:"Art", d:"hard", q:"ما اسم الحركة الفنية التي تعتمد على الألوان الفاتحة ولمسات الفرشاة السريعة، وارتبطت بكلود مونيه؟", a:"الانطباعية"},
+
+    {c:"Food", d:"easy", q:"ما هو المشروب المستخرج من حبوب محمصة ومطحونة ويُعد الأكثر استهلاكًا عالميًا بعد الماء؟", a:"القهوة"},
+    {c:"Food", d:"medium", q:"ما اسم طبق الأرز الإيطالي الكريمي الذي يُطهى ببطء مع المرق؟", a:"الريزوتو"},
+    {c:"Food", d:"hard", q:"ما هو التوابل الأغلى ثمنًا في العالم؟", a:"الزعفران"},
+    {c:"Food", d:"easy", q:"ما اسم الفاكهة الاستوائية ذات القشرة الشوكية والرائحة القوية جدًا؟", a:"الدوريان"},
+    {c:"Food", d:"medium", q:"ما هو الحليب الأساسي المستخدم في صناعة الشوكولاتة التقليدية؟", a:"حليب البقر"},
+    {c:"Food", d:"hard", q:"ما اسم طريقة الطهي الفرنسية التي تعتمد على الطهي البطيء في وعاء مغلق؟", a:"البريز"},
+
+    {c:"Technology", d:"easy", q:"ما اسم الجهاز المستخدم لطباعة المستندات على الورق؟", a:"الطابعة"},
+    {c:"Technology", d:"medium", q:"من هو مؤسس شركتي تسلا وسبيس إكس؟", a:"إيلون ماسك"},
+    {c:"Technology", d:"hard", q:"ما اسم أول حاسوب إلكتروني رقمي في التاريخ؟", a:"إنياك ENIAC"},
+    {c:"Technology", d:"easy", q:"ما اسم برنامج تحرير النصوص الشهير الذي طورته شركة مايكروسوفت؟", a:"مايكروسوفت وورد"},
+    {c:"Technology", d:"medium", q:"ما اسم روبوت المحادثة بالذكاء الاصطناعي الذي طورته شركة OpenAI؟", a:"تشات جي بي تي"},
+    {c:"Technology", d:"hard", q:"من هو مخترع الهاتف؟", a:"ألكسندر غراهام بيل"},
+    {c:"Technology", d:"easy", q:"ما اسم الرمز '@' الذي يُستخدم في عناوين البريد الإلكتروني؟", a:"علامة 'آت'"},
+    {c:"Technology", d:"medium", q:"ما هي الشركة التي صنعت أول هاتف آيفون؟", a:"آبل"},
+
+    {c:"Literature", d:"easy", q:"من مؤلف رواية 'دون كيخوته'؟", a:"ميغيل دي سرفانتس"},
+    {c:"Literature", d:"medium", q:"من كاتب مسرحية 'روميو وجولييت'؟", a:"ويليام شكسبير"},
+    {c:"Literature", d:"hard", q:"من كتب رواية 'الجريمة والعقاب'؟", a:"فيودور دوستويفسكي"},
+    {c:"Literature", d:"easy", q:"من مؤلفة رواية 'ثلاثية غرناطة'؟", a:"رضوى عاشور"},
+    {c:"Literature", d:"medium", q:"من كاتب رواية 'مدن الملح'؟", a:"عبد الرحمن منيف"},
+    {c:"Literature", d:"hard", q:"من كتب ملحمة 'الأوديسة'؟", a:"هوميروس"},
+
+    {c:"Animals", d:"easy", q:"ما هو أكبر طائر في العالم من حيث الحجم ولا يستطيع الطيران؟", a:"النعامة"},
+    {c:"Animals", d:"medium", q:"ما اسم الحيوان الذي يغير لون جلده للتمويه؟", a:"الحرباء"},
+    {c:"Animals", d:"hard", q:"أي حيوان بحري يُعتبر من أذكى الحيوانات نسبةً لحجم دماغه؟", a:"الدلفين"},
+    {c:"Animals", d:"easy", q:"ما هو الحيوان المعروف بتخزين المكسرات استعدادًا للشتاء؟", a:"السنجاب"},
+    {c:"Animals", d:"medium", q:"ما اسم أكبر قطة برية في العالم؟", a:"النمر"},
+    {c:"Animals", d:"hard", q:"أي حيوان ثديي ينام أقل عدد ساعات يوميًا؟", a:"الزرافة"},
+
+    {c:"Space", d:"easy", q:"كم عدد الكواكب التي تمتلك حلقات في مجموعتنا الشمسية؟", a:"4 كواكب"},
+    {c:"Space", d:"medium", q:"ما اسم المحطة التي يعمل بها رواد فضاء من دول متعددة في مدار الأرض؟", a:"محطة الفضاء الدولية"},
+    {c:"Space", d:"hard", q:"ما اسم أقرب مجرة كبيرة إلى مجرة درب التبانة؟", a:"مجرة أندروميدا"},
+    {c:"Space", d:"easy", q:"ما اسم القمر الطبيعي الوحيد للأرض؟", a:"القمر"},
+    {c:"Space", d:"medium", q:"ما اسم أول مسبار فضائي هبط بنجاح على سطح المريخ؟", a:"فايكنغ 1"},
+    {c:"Space", d:"hard", q:"كم يستغرق دوران الأرض الكامل حول الشمس تقريبًا؟", a:"سنة واحدة (365 يومًا تقريبًا)"},
+
+    {c:"Mythology", d:"easy", q:"من هو إله الرعد في الأساطير الإغريقية؟", a:"زيوس"},
+    {c:"Mythology", d:"medium", q:"ما اسم الحصان المجنح في الأساطير الإغريقية؟", a:"بيغاسوس"},
+    {c:"Mythology", d:"hard", q:"من هو الإله المصري القديم برأس ابن آوى المرتبط بالتحنيط والموتى؟", a:"أنوبيس"},
+    {c:"Mythology", d:"easy", q:"ما اسم إله الشمس عند قدماء المصريين؟", a:"رع"},
+    {c:"Mythology", d:"medium", q:"من هي إلهة الحكمة في الأساطير الإغريقية؟", a:"أثينا"},
+    {c:"Mythology", d:"hard", q:"ما اسم الوحش نصف الإنسان نصف الثور الذي عاش في متاهة وفق الأساطير الإغريقية؟", a:"المينوتور"},
+    {c:"Mythology", d:"easy", q:"ما اسم إله البحار في الأساطير الإغريقية؟", a:"بوسيدون"},
+    {c:"Mythology", d:"medium", q:"من هو الإله الإسكندنافي للرعد الذي يحمل مطرقة؟", a:"ثور"},
+
+    {c:"Math & Logic", d:"easy", q:"كم ناتج 8 × 7؟", a:"56"},
+    {c:"Math & Logic", d:"easy", q:"كم عدد أضلاع المثلث؟", a:"3 أضلاع"},
+    {c:"Math & Logic", d:"medium", q:"ما هو الجذر التربيعي للعدد 144؟", a:"12"},
+    {c:"Math & Logic", d:"medium", q:"كم عدد أضلاع الشكل السداسي؟", a:"6 أضلاع"},
+    {c:"Math & Logic", d:"hard", q:"ما هي قيمة العدد 'باي' (π) تقريبًا حتى منزلتين عشريتين؟", a:"3.14"},
+    {c:"Math & Logic", d:"hard", q:"كم ناتج 15 تربيع (15×15)؟", a:"225"},
+    {c:"Math & Logic", d:"easy", q:"كم عدد الأشهر التي تحتوي على 31 يومًا في السنة؟", a:"7 أشهر"},
+    {c:"Math & Logic", d:"medium", q:"ما هو الرقم الذي يأتي مباشرة بعد المليون إذا أضفنا واحدًا؟", a:"1,000,001"},
+
+    {c:"Geography", d:"easy", q:"ما هي عاصمة إسبانيا؟", a:"مدريد"},
+    {c:"Geography", d:"medium", q:"ما هو أطول نهر في قارة أفريقيا بعد نهر النيل؟", a:"نهر الكونغو"},
+    {c:"Geography", d:"hard", q:"ما هي الدولة التي يوجد بها أكبر عدد من الجزر في العالم؟", a:"إندونيسيا"},
+    {c:"Geography", d:"easy", q:"في أي دولة تقع أهرامات الجيزة؟", a:"مصر"},
+
+    {c:"Science", d:"easy", q:"ما هو الكوكب الأقرب إلى كوكب الأرض؟", a:"الزهرة"},
+    {c:"Science", d:"medium", q:"كم عدد فصائل الدم الرئيسية عند الإنسان؟", a:"4 فصائل"},
+    {c:"Science", d:"hard", q:"ما هو الغاز النبيل المستخدم في المصابيح الوامضة والبالونات الطائرة؟", a:"الهيليوم"},
+    {c:"Science", d:"easy", q:"ما هو جزء العين المسؤول عن استقبال الضوء؟", a:"الشبكية"},
+
+    {c:"History", d:"easy", q:"في أي عام هاجر النبي محمد صلى الله عليه وسلم من مكة إلى المدينة؟", a:"622م"},
+    {c:"History", d:"medium", q:"من هو مؤسس الدولة الفاطمية؟", a:"عبيد الله المهدي"},
+    {c:"History", d:"hard", q:"ما اسم المعركة التي هزم فيها المسلمون الفرس عام 636م؟", a:"معركة القادسية"},
+    {c:"History", d:"easy", q:"في أي عام قامت الوحدة بين مصر وسوريا (الجمهورية العربية المتحدة)؟", a:"1958"},
+
+    {c:"Entertainment", d:"easy", q:"ما اسم السلسلة السينمائية التي تدور حول سفينة فضائية اسمها 'ميلينيوم فالكون'؟", a:"حرب النجوم"},
+    {c:"Entertainment", d:"medium", q:"من هو منتج ألبوم 'Thriller' لمايكل جاكسون؟", a:"كوينسي جونز"},
+    {c:"Entertainment", d:"hard", q:"من فاز بجائزة أفضل مخرج في الأوسكار عن فيلم 'Parasite' عام 2020؟", a:"بونغ جون هو"},
+    {c:"Entertainment", d:"easy", q:"ما اسم البطل الخارق الذي يرتدي درعًا حديديًا في أفلام مارفل؟", a:"آيرون مان"},
+
+    {c:"Sports", d:"easy", q:"كم عدد الحُفر في ملعب الغولف القياسي؟", a:"18 حفرة"},
+    {c:"Sports", d:"medium", q:"في أي مدينة أُقيمت أول ألعاب أولمبية حديثة عام 1896؟", a:"أثينا"},
+    {c:"Sports", d:"hard", q:"من هو أصغر لاعب سنًا فاز بكأس العالم لكرة القدم؟", a:"بيليه"},
+    {c:"Sports", d:"easy", q:"كم عدد الأشواط في مباراة الملاكمة الاحترافية عادة؟", a:"12 شوطًا"},
+
+    {c:"General Knowledge", d:"easy", q:"كم عدد أضلاع شكل المربع؟", a:"4 أضلاع"},
+    {c:"General Knowledge", d:"medium", q:"ما هي أكبر قارة من حيث عدد السكان؟", a:"آسيا"},
+    {c:"General Knowledge", d:"hard", q:"ما اسم أول قمر صناعي عربي؟", a:"عربسات"},
+    {c:"General Knowledge", d:"easy", q:"ما هو عكس كلمة 'شمال'؟", a:"جنوب"},
+
+    {c:"Art", d:"easy", q:"ما هي الأداة المستخدمة لنحت التماثيل من الحجر عادة؟", a:"الإزميل"},
+    {c:"Art", d:"hard", q:"ما هي الحركة الفنية التي ينتمي إليها الرسام كلود مونيه؟", a:"الانطباعية"},
+
+    {c:"Food", d:"easy", q:"ما هو المشروب الذي يُصنع من حبوب البن المحمصة؟", a:"القهوة"},
+    {c:"Food", d:"medium", q:"ما اسم الطبق المغربي الشهير المطهو في إناء فخاري مخروطي الشكل؟", a:"الطاجين"},
+
+    {c:"Technology", d:"easy", q:"ما اسم روبوت المحادثة الذكي الذي طورته شركة OpenAI؟", a:"شات جي بي تي"},
+    {c:"Technology", d:"hard", q:"من يُعتبر الأب الروحي لعلم الحاسوب الحديث؟", a:"آلان تورينغ"},
+
+    {c:"Literature", d:"easy", q:"من مؤلف رواية 'البؤساء'؟", a:"فيكتور هوغو"},
+    {c:"Literature", d:"hard", q:"من كتب رواية 'الحرب والسلام'؟", a:"ليو تولستوي"},
+
+    {c:"Animals", d:"easy", q:"ما هو الحيوان الذي يُعرف بلقب 'سفينة الصحراء'؟", a:"الجمل"},
+    {c:"Animals", d:"hard", q:"ما هو الطائر الوحيد القادر على الطيران إلى الخلف؟", a:"الطائر الطنان"},
+
+    {c:"Space", d:"easy", q:"ما اسم الكوكب الذي يشتهر بحلقاته الجميلة؟", a:"زحل"},
+    {c:"Space", d:"hard", q:"ما اسم أول محطة فضائية دولية؟", a:"محطة الفضاء الدولية"},
+
+    {c:"Mythology", d:"easy", q:"من هو إله الحرب في الأساطير الإغريقية؟", a:"آريس"},
+    {c:"Mythology", d:"hard", q:"ما اسم الأفعى ذات الرؤوس السبعة في الأساطير الإغريقية؟", a:"الهيدرا"},
+
+    {c:"Math & Logic", d:"easy", q:"كم ناتج 9 + 6؟", a:"15"},
+    {c:"Math & Logic", d:"hard", q:"ما هو أصغر عدد أولي أكبر من 97؟", a:"101"}
+  ];
+
+  var players = [];
+  var originalPlayers = [];
+  var deck = [];
+  var currentQuestion = null;
+  var holderIndex = -1;
+  var questionsAsked = 0;
+  var threshold = 0;
+  var timerInterval = null;
+  var timeLeft = QUESTION_SECONDS;
+
+  var setupScreen = document.getElementById('screen-setup');
+  var gameScreen = document.getElementById('screen-game');
+  var boomScreen = document.getElementById('screen-boom');
+
+  var nameInput = document.getElementById('name-input');
+  var addBtn = document.getElementById('add-btn');
+  var chipsEl = document.getElementById('chips');
+  var playerCountEl = document.getElementById('player-count');
+  var startBtn = document.getElementById('start-btn');
+
+  function renderChips(){
+    chipsEl.innerHTML = '';
+    players.forEach(function(name, i){
+      var chip = document.createElement('div');
+      chip.className = 'chip';
+      var span = document.createElement('span');
+      span.textContent = name;
+      var btn = document.createElement('button');
+      btn.textContent = '\u00d7';
+      btn.setAttribute('aria-label', 'remove ' + name);
+      btn.addEventListener('click', function(){
+        players.splice(i, 1);
+        renderChips();
+      });
+      chip.appendChild(span);
+      chip.appendChild(btn);
+      chipsEl.appendChild(chip);
+    });
+    playerCountEl.textContent = players.length + (players.length === 1 ? ' player' : ' players');
+    startBtn.disabled = players.length < 2;
+  }
+
+  function addPlayer(){
+    var val = nameInput.value.trim();
+    if(!val) return;
+    if(players.indexOf(val) !== -1){
+      nameInput.value = '';
+      return;
+    }
+    players.push(val);
+    nameInput.value = '';
+    nameInput.focus();
+    renderChips();
+  }
+
+  addBtn.addEventListener('click', addPlayer);
+  nameInput.addEventListener('keydown', function(e){
+    if(e.key === 'Enter') addPlayer();
+  });
+
+  function shuffle(arr){
+    var a = arr.slice();
+    for(var i = a.length - 1; i > 0; i--){
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+    }
+    return a;
+  }
+
+  function nextQuestion(){
+    if(deck.length === 0) deck = shuffle(QUESTIONS);
+    return deck.pop();
+  }
+
+  function showScreen(el){
+    [setupScreen, gameScreen, boomScreen].forEach(function(s){ s.classList.remove('active'); });
+    el.classList.add('active');
+  }
+
+  function stopTimer(){
+    if(timerInterval){
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+  }
+
+  function updateTimerDisplay(){
+    var badge = document.getElementById('timer-badge');
+    badge.textContent = timeLeft;
+    badge.classList.toggle('low', timeLeft <= 3);
+  }
+
+  function startTimer(){
+    stopTimer();
+    timeLeft = QUESTION_SECONDS;
+    updateTimerDisplay();
+    timerInterval = setInterval(function(){
+      timeLeft--;
+      updateTimerDisplay();
+      if(timeLeft <= 0){
+        stopTimer();
+        autoReveal();
+      }
+    }, 1000);
+  }
+
+  function autoReveal(){
+    var revealBtn = document.getElementById('reveal-btn');
+    if(revealBtn.style.display !== 'none'){
+      revealBtn.click();
+    }
+  }
+
+  function proceedRound(){
+    questionsAsked++;
+    document.getElementById('players-left').textContent = players.length;
+    if(questionsAsked > threshold){
+      triggerBoom();
+      return;
+    }
+    renderQuestion();
+  }
+
+  function renderQuestion(){
+    document.getElementById('round-num').textContent = questionsAsked;
+    document.getElementById('holder-name').textContent = players[holderIndex];
+
+    currentQuestion = nextQuestion();
+    document.getElementById('tag-category').textContent = currentQuestion.c;
+    var diffTag = document.getElementById('tag-difficulty');
+    diffTag.textContent = DIFF_LABELS[currentQuestion.d];
+    diffTag.className = 'tag diff-' + currentQuestion.d;
+
+    document.getElementById('question-text').textContent = currentQuestion.q;
+    var answerEl = document.getElementById('answer-text');
+    answerEl.innerHTML = '<span class="label-en">ANSWER</span>' + currentQuestion.a;
+    answerEl.classList.remove('shown');
+
+    document.getElementById('reveal-btn').style.display = 'block';
+    document.getElementById('judge-block').classList.remove('shown');
+    document.getElementById('next-block').classList.remove('shown');
+
+    startTimer();
+  }
+
+  document.getElementById('reveal-btn').addEventListener('click', function(){
+    stopTimer();
+    document.getElementById('answer-text').classList.add('shown');
+    this.style.display = 'none';
+    document.getElementById('judge-block').classList.add('shown');
+  });
+
+  document.getElementById('correct-btn').addEventListener('click', function(){
+    document.getElementById('judge-block').classList.remove('shown');
+    renderPlayerGrid();
+    document.getElementById('next-block').classList.add('shown');
+  });
+
+  document.getElementById('wrong-btn').addEventListener('click', function(){
+    document.getElementById('judge-block').classList.remove('shown');
+    document.getElementById('next-block').classList.remove('shown');
+    proceedRound();
+  });
+
+  function renderPlayerGrid(){
+    var grid = document.getElementById('player-grid');
+    grid.innerHTML = '';
+    players.forEach(function(name, i){
+      if(i === holderIndex) return;
+      var btn = document.createElement('button');
+      btn.className = 'btn player-btn';
+      btn.textContent = name;
+      btn.addEventListener('click', function(){ choosePlayer(i); });
+      grid.appendChild(btn);
+    });
+  }
+
+  function choosePlayer(i){
+    holderIndex = i;
+    document.getElementById('next-block').classList.remove('shown');
+    proceedRound();
+  }
+
+  function triggerBoom(){
+    stopTimer();
+    var eliminatedName = players[holderIndex];
+    var n = questionsAsked - 1;
+
+    document.getElementById('boom-holder-name').textContent = eliminatedName;
+    document.getElementById('boom-stats').textContent =
+      n + (n === 1 ? ' question survived before the bang.' : ' questions survived before the bang.');
+
+    // remove the eliminated player from the game
+    players.splice(holderIndex, 1);
+    holderIndex = -1;
+
+    var subEl = document.getElementById('boom-sub');
+    var remainingEl = document.getElementById('remaining-line');
+    var actionBtn = document.getElementById('boom-action-btn');
+    remainingEl.classList.remove('winner');
+
+    if(players.length <= 1){
+      subEl.textContent = 'was holding the bomb when it went off.';
+      if(players.length === 1){
+        remainingEl.textContent = '🏆 ' + players[0] + ' is the last one standing — winner!';
+        remainingEl.classList.add('winner');
+      } else {
+        remainingEl.textContent = '';
+      }
+      actionBtn.textContent = 'PLAY AGAIN';
+      actionBtn.onclick = fullRestart;
+    } else {
+      subEl.textContent = 'was holding the bomb when it went off — eliminated!';
+      remainingEl.textContent = 'still in the squad: ' + players.join(', ');
+      actionBtn.textContent = 'CONTINUE';
+      actionBtn.onclick = continueGame;
+    }
+
+    showScreen(boomScreen);
+    var flash = document.getElementById('flash');
+    flash.classList.remove('go');
+    void flash.offsetWidth;
+    flash.classList.add('go');
+    document.querySelector('.wrap').classList.remove('shake');
+    void document.querySelector('.wrap').offsetWidth;
+    document.querySelector('.wrap').classList.add('shake');
+    playBoomSound();
+  }
+
+  function continueGame(){
+    questionsAsked = 0;
+    threshold = 1 + Math.floor(Math.random() * 11); // hidden, between 1 and 11
+    holderIndex = Math.floor(Math.random() * players.length);
+    showScreen(gameScreen);
+    proceedRound();
+  }
+
+  function fullRestart(){
+    players = originalPlayers.slice();
+    renderChips();
+    showScreen(setupScreen);
+  }
+
+  function playBoomSound(){
+    try{
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(140, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.5);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.6);
+    } catch(e){}
+  }
+
+  startBtn.addEventListener('click', function(){
+    if(players.length < 2) return;
+    originalPlayers = players.slice();
+    deck = shuffle(QUESTIONS);
+    questionsAsked = 0;
+    threshold = 1 + Math.floor(Math.random() * 11); // hidden, between 1 and 11
+    holderIndex = Math.floor(Math.random() * players.length);
+    showScreen(gameScreen);
+    proceedRound();
+  });
+
+  renderChips();
+
+})();
+</script>
+
+</body>
+</html>
